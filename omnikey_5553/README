@@ -1,0 +1,6 @@
+
+This is an old and now unsupported version of libfreefare (0.1.0) with a dummy stubbed version of libnfc (1.3.4) specifically to support the serial based HID OMNIKEY 5553 reader.
+
+
+
+
