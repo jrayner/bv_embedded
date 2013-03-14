@@ -1,0 +1,13 @@
+
+The code here handles talking to a Gemalto/Cinterion/Siemens MC55i GSM/GPRS module.
+
+Gsmd is an attempt at abstracting away the AT command set complexity, handling the flow control and providing a standardised socket based API for clients. Originally written by Harald Welte, the code has been changed to specifically handle the eccentricities of the MC55i (and never tested with more than one client).
+
+If considering writing a similar daemon design. A better D-Bus based solution exists in the oFono framework (ofono.org).
+
+The mux code is here for posterity, originally derived from the Motorola A780 (see http://wiki.openezx.org/Mux_cli), itself from a Bluetooth stack.
+
+For modern day support of 27.010 multiplexing, refer to the Linux kernel n_gsm driver. 
+
+
+

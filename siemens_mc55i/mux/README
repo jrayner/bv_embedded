@@ -1,0 +1,5 @@
+
+This mux driver has been replaced by the far better n_gsm driver, now part of the kernel.
+
+This basic 27.010 multiplexer has been placed here for posterity, to bit rot gracefully and to likely serve as guidance how not to design and maintain an out of tree driver over many kernel revisions.
+
