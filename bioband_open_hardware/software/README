@@ -1,0 +1,33 @@
+
+This directory holds both the BioBand firmware and Linux PC side software.
+
+To compile the firmware you will need the cortex cross compile toolchain and to
+have that and the openocd flashing scripts in your path, see README file in
+BioBand2/Band/gcc 
+
+The band firmware uses the 3rd party CMSIS and STM32 libraries, which are
+copyright of ARM and ST Micro, respectively.
+
+The Libraries are supplied here to ensure compilation due to a couple of minor
+changes made to the libraries for the BioBand project. The libraries are not the
+current versions and no warranty is implied. Please see the individual libraries
+for licensing terms.
+
+The firmware uses the STM standard peripheral and USB libraries to provide the
+support functionality for numerous areas, namely: the backup domain (bkp),
+analogue to digital conversion (adc), general purpose I/O (gpio), realtime time
+clock (rtc), clock crystal (rcc), power modes (pwr), serial peripheral
+interface (spi), serial interface (usart) and nested vector interrupt handling
+(misc). This simplifies access to these major components, easing the design of
+the firmware.
+
+Versions used:
+CMSIS (ARM) v1.2 (note: not the latest included with below releases)
+(contained as part of earlier releases of ST Micro standard peripherals library)
+
+STM32F10x Standard Peripherals Library (ST Mirco) v3.5.0
+http://www.st.com/internet/com/SOFTWARE_RESOURCES/SW_COMPONENT/FIRMWARE/stm32f10x_stdperiph_lib.zip
+
+STM32F10x and STM32L1xx USB-FS-Device Driver (ST Micro) v3.3.0
+http://www.st.com/internet/com/SOFTWARE_RESOURCES/SW_COMPONENT/FIRMWARE/um0424.zip
+

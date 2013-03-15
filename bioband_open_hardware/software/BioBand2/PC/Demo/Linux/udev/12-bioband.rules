@@ -1,0 +1,5 @@
+# Example udev config for bioband, configured to run the named shell script on
+# On Ubuntu 10.04 this needs to be placed in /etc/udev/rules.d
+# Adjust directory names as required.
+ACTION=="add",SUBSYSTEM=="usb",ATTRS{idVendor}=="0483",ATTRS{idProduct}=="6000",ATTRS{serial}=="?*",RUN+="/data/projects/mrc/udev/bioband.sh '$attr{serial}'"
+

@@ -1,0 +1,56 @@
+
+
+On Linux
+
+Depending on which version of libusb you have access to you'll need to modify
+the makefile in this directory accordingly
+
+If you have access to the latest libusb, libusb-1.0, you can install it on
+Debian or equivalent:
+
+apt-get install libusb-1.0-0
+apt-get install libusb-1.0-0-dev 
+
+
+To use the earlier version of libusb, libusb-0.1, do the following
+
+apt-get install libusb
+apt-get install libusb-dev 
+
+
+To run the code
+
+Ensure that band code is on the bioband (the usual openocd and make flash)
+
+then try running one of the options ...
+
+./mrc -bb
+
+
+Note that if the cwa device is not found ..
+
+- check that you saw the blue led flash as you plugged the device onto the
+  breakout board (or handylink cable) correctly. Is the connector flush with the
+  device?
+  
+- do you have a udev rule that gives user permission to access this device. A
+  temporary check is to try 'sudo ./mrc -bb', supply the superuser
+  password, and see if the device is then found.
+  
+- if the device is found with sudo then it's a permissions problem. Check the
+  permissions of 'usb_device' devtype in /lib/udev/rules.d/50-udev-default.rules,
+  if the file exists, then change it so it reads
+  SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666"
+
+- alternatively if 50-udev-default.rules does not exist, check for any other
+  rules setting the permissions of ENV{DEVTYPE}=="usb_device". If none exist
+  then you will need to set up your own udev rule in /etc/udev/rules.d in an
+  appropriately named file with the rule given above. For any udev problems
+  refer to Google with search terms 'linux udev usb_device'.
+
+
+For all the options do
+./mrc ?
+
+
+

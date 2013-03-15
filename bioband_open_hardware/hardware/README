@@ -1,0 +1,35 @@
+
+The hardware has been designed by Chris Jones, Martin-Jones Technology Ltd
+
+See BioBand Hardware Description for the features.
+
+The low power and small size may make this open hardware platform suitable for a
+wide range of applications.
+
+
+Component Data Sheets used:
+
+STM32F103C6T6 Microcontroller
+http://www.st.com/stonline/products/literature/ds/13587.pdf
+
+LIS331DLH Accelerometer
+http://www.st.com/stonline/products/literature/ds/15094/lis331dlh.pdf
+
+LM95071 Temperature Sensor
+http://www.national.com/ds/LM/LM95071.pdf
+
+HY27UF084G2B NAND Flash Memory
+http://www.hynix.com/datasheet/pdf/flash/HY27UF(08_16)4G2B%20(Rev0.4).pdf
+
+Design files:
+The design files hosted elsewhere on this project were created using Altium
+Designer.
+
+Manufacturing files:
+The manufacturing files are in Gerber photoplotter format with Excel and CSV
+format bills of materials.
+
+XJTAG test scripts:
+The BioBand was designed to be prodution-line tested using the XJTAG
+boundary-scan test system. The 20-pin JTAG connector on the dongle board is
+directly compatible with the XJTAG dongle.

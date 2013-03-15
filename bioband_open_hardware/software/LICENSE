@@ -1,0 +1,5 @@
+The band firmware uses the 3rd party CMSIS and STM32 libraries, which are
+copyright of ARM and ST Micro, respectively. See the licenses within the library
+folders.
+
+The BioBand2 software and firmware is issued under the MIT License, see BioBand2

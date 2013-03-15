@@ -1,0 +1,18 @@
+
+To build, ensure that you have created the cortex cross compile toolchain and
+that you have it (something like /usr/local/cross-cortex-m3/bin) and the scripts
+directory on your path.
+
+Then do make and make flash.
+
+The flashing code assumes the use of openocd and amontec JTAG dongle.
+
+
+
+
+For toolchain details see http://sourceforge.net/p/bioband/home/Toolchain/
+or the docs/Bioband_flashing_and_PC_setup_guide.pdf
+
+Thanks go to fun-tech.se for their helpful STM32 cross toolchain notes
+http://fun-tech.se/stm32/gcc/index.php
+

@@ -1,0 +1,80 @@
+
+The BioBand is an open hardware lightweight battery efficient design based on
+the STMicro STM32F103 processor.
+
+The processor is an inexpensive, low density ARM Cortex-M3 core based device,
+manufactured by ST Micro. The enclosed Cortex-M3 core provides a standardized
+microcontroller which goes beyond the classical CPU to provide the entire heart
+of a microcontroller (including the interrupt system, 24-bit timer and memory
+map). 
+
+Hardware design: Chris Jones
+Firmware: Jim Rayner
+
+The small size of the design, low power usage and simple firmware creation make
+this hardware platform ideal for small scale fast prototyping of niche battery
+efficient mobile devices.
+
+See the original release of the design
+http://sourceforge.net/p/bioband/wiki/Home/
+
+The hardware/software has been forked here to re-add missing firmware files.
+
+----
+
+The project was for a continuous waveform accelerometer, intended for assessing
+physical activity of human participants during daily life conditions.
+
+The project was initiated in 2009 by the Medical Research Council's Epidemiology
+Unit (Cambridge, UK) in partnership with UK Biobank to explore its potential for
+assessing physical activity in large-scale epidemiological studies.
+
+The development squad (DevSquad) was led by Dr Soren Brage (MEU) and included
+the following members:
+Vincent van Hees
+Marcelo Pias
+Salman Taherian
+Michael Catt
+Chris Jones (electronics consultant)
+Jim Rayner (firmware/software)
+Kishen Gohil (Product Design consultant)
+
+Several routes were explored before deciding on the design, which was then
+tested repeatedly on the bench and during field conditions.
+
+The results at the end of the design:
+The accelerometer consistently records 50Hz triaxial acceleration data and
+~0.25Hz temperature data on a single charge for 7+ days during bench testing.
+This is achieved, even when the device is put in standby state for 5 days
+prior (to simulate remote initialisation of monitor, mail-out to participant,
+followed by 7 days of human data collection).
+
+During real-life conditions, however, data collection is sometimes interrupted
+before the programmed end of collection for yet unknown reasons.
+
+We can achieve successful data collection in the field if we seal the connector
+(with silicone-based bathroom sealant), so our suspicion is that there is some
+vulnerability of the connector.
+
+
+Information sources:
+The following are links/resources that have proved useful during the development
+
+Accelerometer LIS331DLH
+http://www.st.com/internet/analog/product/218132.jsp
+
+Nand flash HY27UF084G2B
+http://www.hynix.co.kr/datasheet/eng/nand/details/large_11_HY27UF084G2B.jsp
+
+Cortex m3 reference manual
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0337g/DDI0337G_cortex_m3_r2p0_trm.pdf
+
+STM32 resource page (click on the Resources tab)
+http://www.st.com/stonline/stappl/st/mcu/subclass/1169.jsp
+
+Openocd
+http://developer.berlios.de/projects/openocd/
+
+Helpful STM32 cross toolchain notes
+http://fun-tech.se/stm32/gcc/index.php
+
