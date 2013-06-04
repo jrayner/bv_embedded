@@ -252,6 +252,7 @@ struct link_ldisc_data *ldisc_data_ptr;
 
 /* TODO check all these required since duplicating functionality of tty_io */
 static struct work_struct send_tqueue;
+static struct delayed_work send_tqueue_delayed;
 static struct work_struct receive_tqueue;
 static struct work_struct post_recv_tqueue;
 
@@ -292,10 +293,45 @@ static void create_crctable(__u8 table[]);
 static void mux_sched_send(void);
 
 static unsigned char g_hexbuf[600];
+
+#define LDISC_WRITE_BUF_LEN 256
+static __u8 ldisc_write_buf[LDISC_WRITE_BUF_LEN];
+static __u8 *ldisc_write_buf_ptr;
+static int ldisc_write_buf_len;
+static __u8 mux_device_paused;
+static __u8 mux_closing_down;
+
 static void mux_debug_info(__u8 * buf, int len)
 {
+	char minibuf[10];
 	int i, pos = 0;
-	if (len < 200) {
+	
+	for (pos=0;pos<len;pos+=16) {
+		strcpy(g_hexbuf,"");
+		for(i=pos;i<pos+16;i++) {
+			if(i<len) {
+				sprintf(minibuf,"%02x",buf[i]);
+				if(buf[i]==0xf9) // mark start of frames
+					strcat(minibuf,"*");
+				else
+					strcat(minibuf," ");
+			} else
+				sprintf(minibuf,"   ");
+			strcat(g_hexbuf,minibuf);
+		}
+		strcat(g_hexbuf," | ");
+		for(i=pos;i<pos+16;i++) {
+			if(i<len)
+				sprintf(minibuf,"%c",(buf[i]>31&&buf[i]<127)?buf[i]:'.');
+			else
+				sprintf(minibuf," ");
+			strcat(g_hexbuf,minibuf);	
+		}
+		printk(KERN_INFO "%s\n",g_hexbuf);
+	}
+	printk(KERN_INFO "----\n");
+	return;
+/*	if (len < 200) {
 		for (i = 0; i < len; i++) {
 			sprintf(&g_hexbuf[pos], "%02x ", buf[i]);
 			pos += 3;
@@ -305,6 +341,7 @@ static void mux_debug_info(__u8 * buf, int len)
 	} else {
 		printk(KERN_INFO "Large data, len %d\n",len);
 	}
+*/
 }
 
 
@@ -448,14 +485,8 @@ static int basic_write(__u8 * buf, int len)
 	/* TS0710_DEBUGHEX(buf, total_len); */
 
 	res = mux_ldisc_write(buf, total_len);
-	if (res != total_len) {
-		TS0710_ERRORHEX(buf, total_len);
-		TS0710_ERROR("Write Error (wrote %d out of %d)\n",
-			res, total_len);
-		return res;
-	}
 
-	return total_len;
+	return res;
 }
 
 /* Functions for the crc-check and calculation */
@@ -697,10 +728,11 @@ static int send_closedown_msg(void)
 	uih_pkt->mcc_s_head.type.type = CLD;
 
 	uih_pkt->mcc_s_head.length.ea = 1;
-	uih_pkt->mcc_s_head.length.len = 1;
+	uih_pkt->mcc_s_head.length.len = 0;
 
 	uih_pkt->fcs = crc_calc((__u8 *) uih_pkt, SHORT_CRC_CHECK);
 
+	mux_closing_down=1;
 	return basic_write(buf, 6);
 }
 
@@ -1426,8 +1458,14 @@ static int ts0710_recv_data(ts0710_con * ts0710, char *data, int len)
 
 		if ((ts0710->dlci[dlci].state != CONNECTED)
 		    && (ts0710->dlci[dlci].state != FLOW_STOPPED)) {
-			TS0710_ERROR("Error UIH dlc %d not connected, sending DM\n", dlci);
-			send_dm(ts0710, dlci);
+		    if(mux_closing_down && dlci==0) {
+		    	/* we expect an acknowledgement on closed control channel after sending CLD */
+		    	/* so do nothing */
+		    	TS0710_INFO("CLD acknowledged");
+		    } else {
+				TS0710_ERROR("Error UIH dlc %d not connected, sending DM\n", dlci);
+				send_dm(ts0710, dlci);
+			}
 			break;
 		}
 
@@ -2092,6 +2130,9 @@ static int mux_chars_in_buffer(struct tty_struct *tty)
 		goto out;
 	}
 
+	if(mux_device_paused)
+			goto out;
+			
 	dlci = line;
 	if (ts0710->dlci[0].state == FLOW_STOPPED) {
 		TS0710_ERROR
@@ -2144,6 +2185,10 @@ static int mux_write(struct tty_struct *tty,
 	if ((line < TS0710MUX_MINOR_START) || (line >= NR_MUXS)) {
 		TS0710_ERROR("mux%d is not a valid port\n",line);
 		return -ENODEV;
+	}
+	if(mux_device_paused) {
+		TS0710_DEBUG("%s paused",__func__);
+		return 0;
 	}
 
 	dlci = line;
@@ -2213,6 +2258,10 @@ static int mux_write_room(struct tty_struct *tty)
 	if (!tty) {
 		goto out;
 	}
+	if(mux_device_paused) {
+		TS0710_ERROR("%s paused",__func__);
+		goto out;
+	}
 	line = tty->index;
 	if ((line < TS0710MUX_MINOR_START) || (line >= NR_MUXS)) {
 		TS0710_ERROR("mux%d is not a valid port\n",line);
@@ -2264,6 +2313,8 @@ static int mux_ioctl(struct tty_struct *tty, unsigned int cmd,
 	UNUSED_PARAM(file);
 #endif
 	UNUSED_PARAM(arg);
+
+	TS0710_DEBUG("line %d cmd %u",tty->index,cmd);
 
 	if (!tty) {
 		return -EIO;
@@ -2821,31 +2872,6 @@ static void post_recv_worker(struct work_struct *private_)
 	TS0710_DEBUG("<<\n");
 }
 
-static void mux_sender(void)
-{
-	mux_send_struct *send_info;
-	int chars;
-	__u8 idx;
-
-	chars = mux_ldisc_chars_in_buffer(COMM_FOR_MUX_TTY);
-	if (!chars) {
-		TS0710_DEBUG("no chars in driver buffer\n");
-		/* check if mux ttys are waiting to write */
-		mux_sched_send();
-		return;
-	}
-
-	idx = mux_send_info_idx;
-	if ((idx < NR_MUXS) && (mux_send_info_flags[idx])) {
-		send_info = mux_send_info[idx];
-		if ((send_info) && (send_info->filled)
-		    && (send_info->length <= (TS0710MUX_SERIAL_BUF_SIZE - chars))) {
-
-			mux_sched_send();
-		}
-	}
-}
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20))
 static void send_worker(void *private_)
 #else
@@ -2860,7 +2886,6 @@ static void send_worker(struct work_struct *private_)
 	__u8 dlci;
 
 	UNUSED_PARAM(private_);
-
 	TS0710_DEBUG(">>\n");
 
 	mux_send_info_idx = NR_MUXS;
@@ -2908,12 +2933,12 @@ static void send_worker(struct work_struct *private_)
 			if (bytes_sent < send_info->length) {
 				TS0710_INFO("Failed to send complete UIH (%d < %d)\n",
 					bytes_sent,send_info->length);
-				/* Hopefully the receiver will disregard the partial frame */
 				mux_send_info_idx = j;
-				break;
+				/* break; */
+			} else {
+				send_info->length = 0;
+				send_info->filled = 0;
 			}
-			send_info->length = 0;
-			send_info->filled = 0;
 		} else {
 			TS0710_INFO("Wait for %d to become available on mux%d\n",
 				send_info->length,j);
@@ -3048,12 +3073,38 @@ static int get_from_inbuf_list(unsigned char *buf, int dst_count)
 
 static int mux_ldisc_write(const unsigned char *buf, int count)
 {	
+	int ret=0;
+	
+	int chars_in_buf=COMM_FOR_MUX_TTY->driver->ops->chars_in_buffer(COMM_FOR_MUX_TTY);
+	
+	/* if there's stuff in the buffer, the serial port is busy so don't send */
+	if(chars_in_buf>100) {
+		/* pause the mux devices */
+		if(!mux_device_paused) {
+			mux_device_paused=1;
+			/*TS0710_ERROR("%s %d chars in buffer ",__func__,COMM_FOR_MUX_TTY->driver->ops->chars_in_buffer(COMM_FOR_MUX_TTY));*/
+			ldisc_write_buf_len=count;
+			memcpy(ldisc_write_buf,&buf[0],ldisc_write_buf_len);
+			ldisc_write_buf_ptr=ldisc_write_buf;
+			
+			/* now ask to be woken up again */
+			set_bit(TTY_DO_WRITE_WAKEUP, &COMM_FOR_MUX_TTY->flags);
+			/* claim that we sent the packet to stop things retrying */
+			ret=count;
+		}		
+//		TS0710_ERRORHEX(buf, total_len);
+	} else {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25))
-	int ret = COMM_FOR_MUX_TTY->driver->write(COMM_FOR_MUX_TTY, buf, count);
+		ret = COMM_FOR_MUX_TTY->driver->write(COMM_FOR_MUX_TTY, buf, count);
 #else
-	int ret = COMM_FOR_MUX_TTY->driver->ops->write(COMM_FOR_MUX_TTY, buf, count);
+		ret = COMM_FOR_MUX_TTY->driver->ops->write(COMM_FOR_MUX_TTY, buf, count);
 #endif
-	mux_sender();
+		/* if write returns an error, there's nothing we can do about it */
+		if(ret<0) {
+			TS0710_ERROR("%s mux_ldisc_write error %d",__func__,ret);
+		}
+		mux_sched_send();
+	}
 
 	return ret;
 }
@@ -3073,6 +3124,7 @@ static int mux_ldisc_chars_in_buffer(struct tty_struct *tty)
 static int
 link_ldisc_open(struct tty_struct *tty)
 {
+	__u8 j;
 	if (!tty)
 		return -EINVAL;
 
@@ -3084,15 +3136,33 @@ link_ldisc_open(struct tty_struct *tty)
 	tty->disc_data = NULL;
 	tty->receive_room = 65536;
 
+	/* create mux devices */
+	if(!mux_driver) {
+		TS0710_ERROR("mux driver is null, not creating devices");
+		return 0;
+	}
+	mux_closing_down=0;
+	for (j=TS0710MUX_MINOR_START; j<NR_MUXS; j++)
+		tty_register_device(mux_driver, j, NULL);
+	
 	return 0;
 }
 
 static void
 link_ldisc_close(struct tty_struct *tty)
 {
-	TS0710_INFO("link_ldisc_close\n\n");
+	__u8 j;
 
 	/* TODO - force disconnection of the mux */
+	/* by this stage we no longer have the ability to write to the modem */
+	/* destroy mux devices */
+	if(!mux_driver) {
+		TS0710_ERROR("mux driver is null, not unregistering devices");
+		return;
+	}
+
+	for (j=TS0710MUX_MINOR_START; j<NR_MUXS; j++)
+		tty_unregister_device(mux_driver, j);
 }
 
 static int link_ldisc_hangup(struct tty_struct *tty)
@@ -3154,8 +3224,37 @@ link_ldisc_receive(struct tty_struct *tty, const unsigned char *buf,
 static void
 link_ldisc_wakeup(struct tty_struct *tty)
 {
-	TS0710_INFO("link_ldisc_wakeup\n");
-	/* TODO - any use for wakeup? */
+	int ret=0;
+	TS0710_DEBUG("%s",__func__);
+
+	/* there's data left in our send buffer */	
+	clear_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+
+	if(ldisc_write_buf_len) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25))
+		ret = tty->driver->write(tty, ldisc_write_buf_ptr, ldisc_write_buf_len);
+#else
+		ret = tty->driver->ops->write(tty, ldisc_write_buf_ptr, ldisc_write_buf_len);
+#endif
+		
+		if(ret<0) {
+			TS0710_ERROR("%s write failed %d",__func__,ret);
+		} else if(ret<ldisc_write_buf_len) {
+			/* not all the data went, so update pointers and be prepared to try again */
+			TS0710_INFO("%s write was incomplete (%d/%d)",__func__,ret,ldisc_write_buf_len);
+			ldisc_write_buf_len-=ret;
+			ldisc_write_buf_ptr+=ret;
+			set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
+			mux_sched_send();
+		} else {
+			/*TS0710_ERROR("%s write completed OK",__func__);*/
+			/* everything was sent, so clear the mux_device_paused flag */
+			mux_device_paused=0;
+			// Give everything a jiffy (10ms on armel) for the dust to settle.
+			schedule_delayed_work(&send_tqueue_delayed,1);
+			//mux_sched_send();
+		}
+	}
 }
 
 
@@ -3260,6 +3359,9 @@ static int __init mux_init(void)
 
 	ts0710_init();
 
+	mux_device_paused=0;
+	mux_closing_down=0;
+	
 	for (j = 0; j < NR_MUXS; j++) {
 		mux_send_info_flags[j] = 0;
 		mux_send_info[j] = 0;
@@ -3276,6 +3378,7 @@ static int __init mux_init(void)
 	INIT_WORK(&post_recv_tqueue, post_recv_worker, NULL);
 #else
 	INIT_WORK(&send_tqueue, send_worker);
+	INIT_DELAYED_WORK(&send_tqueue_delayed, send_worker);
 	INIT_WORK(&receive_tqueue, receive_worker);
 	INIT_WORK(&post_recv_tqueue, post_recv_worker);
 #endif
@@ -3308,9 +3411,6 @@ static int __init mux_init(void)
 
 	if (tty_register_driver(mux_driver))
 		panic("Couldn't register mux driver");
-
-	for (j=TS0710MUX_MINOR_START; j<NR_MUXS; j++)
-		tty_register_device(mux_driver, j, NULL);
 
 	return 0;
 }
